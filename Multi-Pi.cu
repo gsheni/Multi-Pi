@@ -1,3 +1,4 @@
+
 // Gaurav Sheni
 // CSC 391 
 // December 2, 2015
@@ -13,194 +14,169 @@
 #include <math.h>
 #include <cuda.h>
 
-//function declartion
+__global__ void first_call();
+__global__ void normalized_freq(char* digits, int* global_mem_freq_count, cudaStream_t A);
 void CUDAErrorCheck();
-__global__ void normalized_freq(int* ,  int* , int* );
-//a function I found online to check why large values 15 million plus did not run
-//this told me it was due to allocating too much memory from curand states
-//https://code.google.com/p/stanford-cs193g-sp2010/wiki TutorialWhenSomethingGoesWrong
-void CUDAErrorCheck()
-{
-        cudaError_t error = cudaGetLastError();
-        if (error != cudaSuccess)
-        {
-                printf("CUDA error : %s (%d)\n", cudaGetErrorString(error), error);
-                //don't exit, lets just keep going
-                //exit(0);
-        }
-}
-__global__ void normalized_freq(int* digits,  int* freq_count, int* number_of_points){
 
-	//get the global id because need to know which thread in
-	int global_id = blockDim.x * blockIdx.x + threadIdx.x;
-
-	//just to make sure that no extra calculation than what is required is done
-	if (global_id >= (*number_of_points)){
-		return;
-	}
-
-	int rounded_x = digits[global_id];
-	printf ("Digits: %i\n", rounded_x);
-	atomicAdd(&freq_count[rounded_x], 1);
-}
+//number of digits to read each time
+#define number_of_digits 5000000
 
 int main ( int argc, char *argv[] ) {
+
+	cudaSetDevice(0);
+	first_call<<<1,1>>>();
+	cudaSetDevice(1);
+	first_call<<<1,1>>>();
+
+	clock_t start; // for starting
+	clock_t stop; //for stoping
+	double execution_time;	//total time 
+	start = clock();	//ready set go
 
 	///check for correct # of arguments
 	if (argc != 2){
 		printf ("Incorrect number of command line arugments.\r\n");
 		exit(1);
 	}
-		
-	int number_of_points = 10;
-	int half_number_of_points = number_of_points/2;
 
-	int *first_half_digits = (int *)malloc(half_number_of_points * sizeof(int));
-	int *second_half_digits = (int *)malloc(half_number_of_points * sizeof(int));
-	int c = 0;
-	FILE *file = fopen(argv[1], "r");
-
-	int i = 0;
-	int j = 0;
-	while(c != EOF){
-		c = fgetc(file);
-		//below make sure its a digit
-		if(('0' <= c) && (c <= '9')){
-			//printf("%d\n", c - '0');
-			if (i < half_number_of_points ){
-				*(first_half_digits+i) = c - '0';
-				i++;
-			}
-			else{
-				*(second_half_digits+j)= c - '0';
-				j++;
-			}
-		}
-	}
-
-	for(i = 0; i < half_number_of_points ; i++){
-		printf("F: %i\n",*(first_half_digits+i));
-	}
-	for(i = 0; i < half_number_of_points ; i++){
-		printf("S: %i\n",*(second_half_digits+i));
-	}
-
-	//to keep track of frequencies 
-	//initliaze to 0 
-	int first_freq_count[10] = { 0 };
-	int second_freq_count[10] = { 0 };
-
-	int device_sync_count = 0;
-
-	int *dev_first_freq_count;
-	int *dev_first_half_digits;
-	int *dev_first_number_of_points;
-
-	cudaSetDevice(0);
-	CUDAErrorCheck();
-
-	cudaMalloc((void**) &dev_first_freq_count, 10*sizeof(int));
-	CUDAErrorCheck();
-	cudaMalloc((void**) &dev_first_half_digits, half_number_of_points*sizeof(int));
-	CUDAErrorCheck();
-	cudaMalloc((void**) &dev_first_number_of_points, sizeof(int));
-	CUDAErrorCheck();
-
-	cudaMemcpy(dev_first_freq_count, &first_freq_count, 10*sizeof(int), cudaMemcpyHostToDevice);
-	CUDAErrorCheck();
-	cudaMemcpy(dev_first_half_digits, &first_half_digits, half_number_of_points*sizeof(int), cudaMemcpyHostToDevice);
-	CUDAErrorCheck();
-	cudaMemcpy(dev_first_number_of_points, &half_number_of_points, sizeof(int), cudaMemcpyHostToDevice);
-	CUDAErrorCheck();
-
-	normalized_freq<<<(int)ceil(half_number_of_points/1024)+1, 1024>>>(dev_first_half_digits,  dev_first_freq_count, dev_first_number_of_points);
-	CUDAErrorCheck();
-
-	//playing catch up.
-	// cudaThreadSynchronize();
-	cudaDeviceSynchronize();
-	CUDAErrorCheck();
-	printf ("GPUs Synchronized (%i).\r\n", device_sync_count);
-	device_sync_count++;
-
-	cudaMemcpy(first_freq_count, dev_first_freq_count, 10*sizeof(int), cudaMemcpyDeviceToHost);
-	CUDAErrorCheck();
-
-	cudaFree(dev_first_freq_count);
-	cudaFree(dev_first_half_digits);
-	cudaFree(dev_first_number_of_points);
-
-	cudaSetDevice(1);
-	CUDAErrorCheck();
-
-	int *dev_second_freq_count;
-	int *dev_second_half_digits;
-	int *dev_second_number_of_points;
-
-	cudaMalloc((void**) &dev_second_freq_count, 10*sizeof(int));
-	cudaMalloc((void**) &dev_second_half_digits, half_number_of_points*sizeof(int));
-	cudaMalloc((void**) &dev_second_number_of_points, sizeof(int));
-	CUDAErrorCheck();
-
-	cudaMemcpy(dev_second_freq_count, &second_freq_count, 10*sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(dev_second_half_digits, &second_half_digits, half_number_of_points*sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(dev_second_number_of_points, &half_number_of_points, sizeof(int), cudaMemcpyHostToDevice);
-	CUDAErrorCheck();
-
-	normalized_freq<<<(int)ceil(half_number_of_points/1024)+1, 1024>>>(dev_second_half_digits,  dev_second_freq_count, dev_second_number_of_points);
-
-	//playing catch up
-	//cudaThreadSynchronize();
-	cudaDeviceSynchronize();
-	printf ("GPUs Synchronized (%i).\r\n", device_sync_count);
-	device_sync_count++;
-	CUDAErrorCheck();
-
-	cudaMemcpy(second_freq_count, dev_second_freq_count, 10*sizeof(int), cudaMemcpyDeviceToHost);
-	CUDAErrorCheck();
-
-	//free memory
-	cudaFree(dev_first_freq_count);
-	cudaFree(dev_first_half_digits);
-	cudaFree(dev_second_number_of_points);
-
-	CUDAErrorCheck();
-
-	for(i = 0; i < (10) ; i++){
-		printf("FFreq: %i\n", *(first_freq_count + i));
-	}
-
-	for(i = 0; i < (10) ; i++){
-		printf("SFreq: %i\n",*(second_freq_count + i));
-	}
-	
-	//open file to be read into
-	FILE *file_output = fopen("freq.dat", "w");
-	if (file_output == NULL) {
-	    printf("File could not be created. ");
+	FILE *file_read = fopen(argv[1], "r+");
+	if (file_read == NULL) {
+	    printf("File could not be read. ");
 	    exit(1);
 	}
 
-	int total_freq = 0;
-	for(i=0;i<10;i++){
-		//index of 1 becomes 0.1, 2 becomes 0.2
-		double output = (double) i / 10;
+	int A_freq_count[10] = {0};
+	int B_freq_count[10] = {0};
+	char* A_digits = (char*)malloc(sizeof(char) * number_of_digits);
 
-		float output_freq = (float) (first_freq_count[i]+second_freq_count[i]) / ((float)number_of_points * 2.00);
+	int device_sync_count = 1;
 
-		fprintf(file_output, "%0.0f\t", output*10);
-		fprintf(file_output, "%f\n", output_freq);
+	int *dev_A_freq_count;
+	char *dev_A_digits;
+	int *dev_B_freq_count;
+	char *dev_B_digits;
 
-		// printf("Frequence at %i, is %0.0f\n", i, output_freq);
+	int number_of_freq_count = 10;
 
-		// below is for debuggin purpooses and just checking 
-		total_freq =+ output_freq;
+	cudaSetDevice(0);
+	cudaStream_t stream1;
+	CUDAErrorCheck();
+	cudaStreamCreate(&stream1);
+	CUDAErrorCheck();
+	cudaHostAlloc((void**) &dev_A_freq_count, number_of_freq_count*sizeof(int), cudaHostAllocDefault);
+	CUDAErrorCheck();
+	cudaHostAlloc((void**) &dev_A_digits, number_of_digits*sizeof(char), cudaHostAllocDefault);
+	CUDAErrorCheck();
+	cudaMemcpyAsync(dev_A_freq_count, &A_freq_count, number_of_freq_count * sizeof(int), cudaMemcpyHostToDevice, stream1);
+	CUDAErrorCheck();
+
+	cudaSetDevice(1);
+	cudaStream_t stream2;
+	CUDAErrorCheck();
+	cudaStreamCreate(&stream2);
+	cudaHostAlloc((void**) &dev_B_freq_count, number_of_freq_count*sizeof(int), cudaHostAllocDefault);
+	cudaHostAlloc((void**) &dev_B_digits, number_of_digits*sizeof(char), cudaHostAllocDefault);
+	cudaMemcpyAsync(dev_B_freq_count, &B_freq_count, number_of_freq_count * sizeof(int), cudaMemcpyHostToDevice, stream2);
+	CUDAErrorCheck();
+
+	fgetc(file_read);
+
+	while(fgets(A_digits, number_of_digits + 1, file_read) != NULL ) {
+		// printf("Input: %s\n\n", A_digits);
+		int len = strlen(A_digits);
+		// printf("Size %i\n", len);
+		strcat(A_digits, "---------------------------");
+		// printf("Input %s\n", A_digits);
+		cudaSetDevice(0);
+		cudaMemcpyAsync(dev_A_digits, A_digits, number_of_digits * sizeof(char), cudaMemcpyHostToDevice, stream1);
+		normalized_freq<<<(int)ceil(number_of_digits/1024) + 1, 1024>>>(dev_A_digits,  dev_A_freq_count, stream1);
+		CUDAErrorCheck();
+		cudaStreamSynchronize(stream1);
+
+		if (fgets(A_digits, number_of_digits + 1, file_read) != NULL){
+			// printf("Input: %s\n\n", A_digits);
+			len = strlen(A_digits);
+			// printf("Size %i\n", len);
+			strcat(A_digits, "---------------------------");
+			cudaSetDevice(1);
+			cudaMemcpyAsync(dev_B_digits, A_digits, number_of_digits * sizeof(char), cudaMemcpyHostToDevice, stream2);
+			normalized_freq<<<(int)ceil(number_of_digits/1024) + 1, 1024>>>(dev_B_digits,  dev_B_freq_count, stream2);
+			CUDAErrorCheck();
+			cudaStreamSynchronize(stream2);
+		}
+		cudaDeviceSynchronize();
+		printf("GPUs Synchronized (%i)\n\n", device_sync_count);
+		device_sync_count++;
 	}
-	printf("Total Freq = %i\n", total_freq);
 
-	//close file output
-	fclose(file_output);
+	cudaSetDevice(0);
+	cudaMemcpyAsync(A_freq_count, dev_A_freq_count, number_of_freq_count * sizeof(int), cudaMemcpyDeviceToHost, stream1);
+	cudaSetDevice(1);
+	cudaMemcpyAsync(B_freq_count, dev_B_freq_count, number_of_freq_count * sizeof(int), cudaMemcpyDeviceToHost, stream2);
+
+	cudaFree(dev_A_freq_count);
+	cudaFree(dev_A_digits);
+	cudaFree(dev_B_freq_count);
+	cudaFree(dev_B_digits);
+
+	A_freq_count[3]++;
+	int total = 0;
+	for (int i = 0; i < 10; i++) {
+		printf("Frequence at %i, is %i\n", i, A_freq_count[i] + B_freq_count[i]);
+		total = total + A_freq_count[i] + B_freq_count[i];
+	}
+	printf("Total Frequency: %i\n", total);
+	//STOP
+	stop = clock();
+
+	//get the execution time
+	execution_time = ((double) (stop - start)) / CLOCKS_PER_SEC;
+	//Print the execution time
+	printf("Execution Time in Seconds: %.8lf\n", execution_time );
 
 	//exit the program, done
 	exit(0);
+
+}
+
+//dummy function
+__global__ void first_call(){
+	int z = 1;
+	if ( z != 1 ){
+	}
+}
+__global__ void normalized_freq(char* digits, int* global_mem_freq_count, cudaStream_t A) {
+
+	int global_ID = blockDim.x * blockIdx.x + threadIdx.x;
+
+	if (global_ID >= number_of_digits || digits[global_ID] == '\0' || digits[global_ID] == '-'){
+		return;
+	}
+
+	__shared__ int block_freq_count[10];
+
+	if (threadIdx.x == 0){
+		memset(block_freq_count, 0, 10 * sizeof(int));
+	}
+	syncthreads();
+
+	// printf("Current input: %c, adding \n", digits[global_ID]);
+	atomicAdd(&block_freq_count[digits[global_ID] - '0'], 1);
+
+	syncthreads();
+	if (threadIdx.x == 0){
+			// printf("Global Adding Freq\n");
+		for (int i = 0; i< 10 ; i++){
+			atomicAdd(&global_mem_freq_count[i], block_freq_count[i]);
+		}
+	}
+}
+void CUDAErrorCheck()
+{
+        cudaError_t error = cudaGetLastError();
+        if (error != cudaSuccess)
+        {
+                printf("CUDA -error : %s (%d)\n", cudaGetErrorString(error), error);
+                //exit(0);
+        }
 }
