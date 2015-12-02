@@ -6,17 +6,21 @@
 
 #include <stdio.h>
 
+//dummy call
 __global__ void first_call();
 __global__ void normalized_freq(char* digits, int* global_mem_freq_count, cudaStream_t A);
 
 //number of digits to read each time
+//global because kernel call needs to know
 #define number_of_digits 1000000
 
 int main ( int argc, char *argv[] ) {
 
 	cudaSetDevice(0);
+	//dummy call to remove lag
 	first_call<<<1,1>>>();
 	cudaSetDevice(1);
+	//dummy call to remove lag
 	first_call<<<1,1>>>();
 
 	clock_t start; // for starting
@@ -30,7 +34,8 @@ int main ( int argc, char *argv[] ) {
 		exit(1);
 	}
 
-	FILE *file_read = fopen(argv[1], "r+");
+	//open the file inputed command line argument
+	FILE *file_read = fopen(argv[1], "r");
 	if (file_read == NULL) {
 	    printf("File could not be read. ");
 	    exit(1);
@@ -153,13 +158,12 @@ int main ( int argc, char *argv[] ) {
 	A_freq_count[3]++;
 	int total = 0;
 	for (int i = 0; i < 10; i++) {
-		printf("Frequence at %i, is %i\n", i, A_freq_count[i] + B_freq_count[i]+ A2_freq_count[i] + B2_freq_count[i]);
+		// printf("Frequence at %i, is %i\n", i, A_freq_count[i] + B_freq_count[i]+ A2_freq_count[i] + B2_freq_count[i]);
 		float output = (float) ( A_freq_count[i] + B_freq_count[i]+ A2_freq_count[i] + B2_freq_count[i] ) / (float) 100000001;
-
 		fprintf(file_output,"%i\t%f\n", i, output);
 		total = total + A_freq_count[i] + B_freq_count[i] + A2_freq_count[i] + B2_freq_count[i];
 	}
-	printf("Total Frequency: %i\n", total);
+	// printf("Total Frequency: %i\n", total);
 	//STOP
 	stop = clock();
 
